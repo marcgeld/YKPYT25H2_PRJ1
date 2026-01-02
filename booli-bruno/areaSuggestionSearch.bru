@@ -1,0 +1,45 @@
+meta {
+  name: areaSuggestionSearch
+  type: graphql
+  seq: 2
+}
+
+post {
+  url: https://www.booli.se/graphql
+  body: graphql
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  User-Agent: booli-bruno-cli/0.1
+  x-apollo-operation-name: searchForSale
+  apollo-require-preflight: true
+  Origin: https://www.booli.se
+  Referer: https://www.booli.se/
+}
+
+body:graphql {
+  query areaSuggestionSearch {
+    # The actual field names would depend on Booli's schema
+    # This is likely searching for area suggestions based on "ekto"
+    areaSuggestionSearch(search: "partille") {
+      suggestions {
+        id
+        displayName
+        parent
+        parentType
+        parentDisplayName
+        parentTypeDisplayName
+        parentId
+      }
+    }
+  }
+  
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

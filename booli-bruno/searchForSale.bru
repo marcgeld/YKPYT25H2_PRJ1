@@ -1,0 +1,71 @@
+meta {
+  name: searchForSale
+  type: graphql
+  seq: 3
+}
+
+post {
+  url: https://www.booli.se/graphql
+  body: graphql
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+  User-Agent: booli-bruno-cli/0.1
+  x-apollo-operation-name: searchForSale
+  apollo-require-preflight: true
+  Origin: https://www.booli.se
+  Referer: https://www.booli.se/
+}
+
+body:graphql {
+  query searchCount {
+    searchForSale(
+      input: {
+        filters: [
+          { key: "objectType", value: "Villa,Radhus,Parhus,Kedjehus" }
+          { key: "tenureForm", value: "Äganderätt" }
+          { key: "propertyType", value: "Sold" }
+          { key: "extendAreas", value: "1" }
+        ]
+        areaId: "268"
+        pageSize: 5
+        page: 1
+      }
+    ) {
+      totalCount
+      pages
+      result {
+        ... on Property {
+          id
+          propertyType
+          livingArea {
+            raw
+            unit
+          }
+          rooms {
+            raw
+            unit
+          }
+          plotArea {
+            raw
+            unit
+          }
+          objectType
+          streetAddress
+          latitude
+          longitude
+          url
+        }
+      }
+    }
+  }
+  
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

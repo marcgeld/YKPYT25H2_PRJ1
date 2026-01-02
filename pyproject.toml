@@ -1,0 +1,26 @@
+[project]
+name = "value_meridian"
+version = "0.0.1"
+description = "Fetch data to local CSV cache. Create model and analyze data."
+authors = [
+    { name = "Marcus Gelderman", email = "marcgeld@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.14"
+
+dependencies = [
+    "requests>=2.31",
+    "gql[requests]>=4.0.0"
+]
+
+[project.scripts]
+vm-fetch = "value_meridian.fetch_data_to_local_cache:main"
+vm-train = "value_meridian.train:main"
+vm-infer = "value_meridian.inference:main"
+
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
