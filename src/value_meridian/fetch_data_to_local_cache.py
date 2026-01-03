@@ -1,54 +1,44 @@
+"""
+ValueMeridian - Fetch sold property data from Booli GraphQL and store it as a local CSV cache.
+
+- Uses gql with RequestsHTTPTransport.
+- Paginates through all pages.
+- Flattens nested GraphQL fields to a single row per sold property.
+- Outputs a Pandas-friendly CSV (stable column order).
+"""
+
+from __future__ import annotations
+
 import argparse
 import csv
+import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
-BOOLI_GRAPHQL_URL = "https://www.booli.se/graphql"
+
+# Default endpoint (you can override with BOOLI_GRAPHQL_URL env var)
+DEFAULT_BOOLI_GRAPHQL_URL = "https://www.booli.se/graphql"
 
 
-def build_transport() -> RequestsHTTPTransport:
-    """
-    Build the GraphQL HTTP transport for Booli's Apollo endpoint.
-    """
-    return RequestsHTTPTransport(
-        url=BOOLI_GRAPHQL_URL,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Origin": "https://www.booli.se",
-            "Referer": "https://www.booli.se/",
-            "User-Agent": "value-meridian-cli/0.0.1",
-            # Apollo-specific headers to satisfy CSRF / preflight requirements
-            "x-apollo-operation-name": "searchCount",
-            "apollo-require-preflight": "true",
-        },
-        verify=True,
-        retries=3,
-    )
-
-
-# Filters are hard-coded in the query body as requested.
+# This query matches your new working query structure.
+# Note: Booli expects areaId as ID!, not String!.
 SEARCH_SOLD_QUERY = gql(
     """
-    query searchCount(
-      $areaId: ID!,
-      $page: Int!,
-      $pageSize: Int!
-    ) {
+    query searchCount($areaId: ID!, $pageSize: Int!, $page: Int!) {
       searchSold(
         input: {
-          areaId: $areaId
-          pageSize: $pageSize
-          page: $page
           filters: [
             { key: "objectType", value: "Villa,Kedjehus-Parhus-Radhus" }
             { key: "tenureForm", value: "Äganderätt" }
             { key: "minSoldDate", value: "2010-01-01" }
             { key: "extendAreas", value: "1" }
           ]
+          areaId: $areaId
+          pageSize: $pageSize
+          page: $page
         }
       ) {
         totalCount
@@ -59,16 +49,44 @@ SEARCH_SOLD_QUERY = gql(
             id
             constructionYear
             operatingCost { raw unit }
-            livingArea     { raw unit }
-            plotArea       { raw unit }
-            rooms          { raw unit }
-            primaryArea  { type name }
-            secondaryArea{ type name id }
+            livingArea { raw unit }
+            plotArea { raw unit }
+            areas { type name }
+            rooms { raw unit }
+            location {
+              address {
+                streetAddress
+                postCode
+              }
+              namedAreas
+              region {
+                municipalityName
+                countyName
+              }
+            }
             objectType
-            streetAddress
             latitude
             longitude
             url
+          }
+          ... on SoldProperty {
+            soldDate
+            listPrice { raw unit }
+            firstPrice { raw unit }
+            soldPrice { raw unit }
+            soldSqmPrice { raw unit }
+            agent {
+              id
+              name
+              recommendations
+              reviewCount
+              overallRating
+              premium
+            }
+            agency {
+              id
+              name
+            }
           }
         }
       }
@@ -77,131 +95,244 @@ SEARCH_SOLD_QUERY = gql(
 )
 
 
-def fetch_sold_page(
-    client: Client,
-    *,
-    area_id: str,
-    page: int,
-    page_size: int,
-) -> Dict[str, Any]:
+def build_transport(url: str) -> RequestsHTTPTransport:
     """
-    Fetch a single page of sold properties using the GraphQL client.
-    """
-    variables = {
-        "areaId": area_id,
-        "page": page,
-        "pageSize": page_size,
-    }
+    Create a Requests transport with headers that work against Booli's Apollo GraphQL endpoint.
 
+    These headers help avoid Apollo CSRF protections and mimic a normal browser origin.
+    """
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "value-meridian/0.1",
+        "x-apollo-operation-name": "searchCount",
+        "apollo-require-preflight": "true",
+        "Origin": "https://www.booli.se",
+        "Referer": "https://www.booli.se/",
+    }
+    return RequestsHTTPTransport(url=url, headers=headers, verify=True, retries=3)
+
+
+def fetch_sold_page(client: Client, area_id: str, page: int, page_size: int) -> Dict[str, Any]:
+    """
+    Fetch one page of sold results from Booli GraphQL.
+    """
+    variables = {"areaId": area_id, "page": page, "pageSize": page_size}
     result = client.execute(SEARCH_SOLD_QUERY, variable_values=variables)
-    # result is the root of the query, i.e. {"searchSold": {...}}
     return result["searchSold"]
 
 
-def flatten_property(node: Dict[str, Any]) -> Dict[str, Any]:
+def areas_to_maps(areas: Optional[List[Dict[str, Any]]]) -> Tuple[Dict[str, str], List[str]]:
     """
-    Flatten a single node from GraphQL into a simple dict for CSV.
+    Convert the 'areas' list into:
+    - a dict with one value per type (first seen wins)
+    - a list of "type:name" tokens (de-duplicated, stable) for optional debugging/feature use
 
-    This assumes the node has the fields of a Property as returned
-    by the searchSold query.
+    IMPORTANT:
+    The 'areas' list in your sample is NOT about floor areas (BOA/BIA), it's geographic/admin metadata.
     """
-    living = node.get("livingArea") or {}
-    plot = node.get("plotArea") or {}
+    by_type: Dict[str, str] = {}
+    tokens: List[str] = []
+    seen = set()
+
+    for a in areas or []:
+        t = a.get("type")
+        n = a.get("name")
+        if not t or not n:
+            continue
+
+        # Token list (dedup)
+        token = f"{t}:{n}"
+        if token not in seen:
+            tokens.append(token)
+            seen.add(token)
+
+        # First occurrence per type wins (to keep stable columns)
+        if t not in by_type:
+            by_type[t] = n
+
+    return by_type, tokens
+
+
+def join_list(value: Any, sep: str = "|") -> str:
+    """
+    Join a list into a single string column; return empty string for missing.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        # Deduplicate while preserving order
+        out: List[str] = []
+        seen = set()
+        for v in value:
+            s = str(v)
+            if s not in seen:
+                out.append(s)
+                seen.add(s)
+        return sep.join(out)
+    return str(value)
+
+
+def flatten_result(node: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Flatten a single searchSold 'result' element into a CSV-friendly row.
+
+    Booli appears to return a merged object where sold fields (SoldProperty) are present
+    alongside property fields (Property). We therefore safely read both sets of fields
+    from the same node.
+    """
+    operating_cost = node.get("operatingCost") or {}
+    living_area = node.get("livingArea") or {}
+    plot_area = node.get("plotArea") or {}
     rooms = node.get("rooms") or {}
-    op_cost = node.get("operatingCost") or {}
-    primary = node.get("primaryArea") or {}
-    secondary = node.get("secondaryArea") or {}
+
+    list_price = node.get("listPrice") or {}
+    first_price = node.get("firstPrice") or {}
+    sold_price = node.get("soldPrice") or {}
+    sold_sqm_price = node.get("soldSqmPrice") or {}
+
+    agent = node.get("agent") or {}
+    agency = node.get("agency") or {}
+
+    location = node.get("location") or {}
+    address = location.get("address") or {}
+    region = location.get("region") or {}
+
+    areas_by_type, areas_tokens = areas_to_maps(node.get("areas"))
+
+    # Post code: sometimes in address.postCode, sometimes only in areas[type=postcode]
+    post_code = address.get("postCode") or areas_by_type.get("postcode") or ""
+
+    # Named areas: list like ["Furuskog"]
+    named_areas = join_list(location.get("namedAreas"))
+
+    # userDefined can appear multiple times; keep a stable joined list of all userDefined names
+    user_defined_names = []
+    for token in areas_tokens:
+        if token.startswith("userDefined:"):
+            user_defined_names.append(token.split(":", 1)[1])
+    user_defined_joined = join_list(user_defined_names)
 
     return {
+        # Identity & transaction
         "id": node.get("id"),
+        "sold_date": node.get("soldDate"),
+
+        # Prices
+        "sold_price_raw": sold_price.get("raw"),
+        "sold_price_unit": sold_price.get("unit"),
+        "sold_sqm_price_raw": sold_sqm_price.get("raw"),
+        "sold_sqm_price_unit": sold_sqm_price.get("unit"),
+        "list_price_raw": list_price.get("raw"),
+        "list_price_unit": list_price.get("unit"),
+        "first_price_raw": first_price.get("raw"),
+        "first_price_unit": first_price.get("unit"),
+
+        # Property basics
+        "object_type": node.get("objectType"),
         "construction_year": node.get("constructionYear"),
-        "operating_cost_raw": op_cost.get("raw"),
-        "operating_cost_unit": op_cost.get("unit"),
-        "living_area_raw": living.get("raw"),
-        "living_area_unit": living.get("unit"),
-        "plot_area_raw": plot.get("raw"),
-        "plot_area_unit": plot.get("unit"),
+        "living_area_raw": living_area.get("raw"),
+        "living_area_unit": living_area.get("unit"),
+        "plot_area_raw": plot_area.get("raw"),
+        "plot_area_unit": plot_area.get("unit"),
         "rooms_raw": rooms.get("raw"),
         "rooms_unit": rooms.get("unit"),
-        "primary_area_type": primary.get("type"),
-        "primary_area_name": primary.get("name"),
-        "secondary_area_type": secondary.get("type"),
-        "secondary_area_name": secondary.get("name"),
-        "secondary_area_id": secondary.get("id"),
-        "object_type": node.get("objectType"),
-        "street_address": node.get("streetAddress"),
+        "operating_cost_raw": operating_cost.get("raw"),
+        "operating_cost_unit": operating_cost.get("unit"),
+
+        # Location / address
+        "street_address": address.get("streetAddress"),
+        "post_code": post_code,
+        "named_areas": named_areas,
+        "municipality_name": region.get("municipalityName") or areas_by_type.get("municipality"),
+        "county_name": region.get("countyName") or areas_by_type.get("county"),
         "latitude": node.get("latitude"),
         "longitude": node.get("longitude"),
+
+        # Useful area tags (admin/geo)
+        "area_country": areas_by_type.get("country", ""),
+        "area_populated_area": areas_by_type.get("populatedArea", ""),
+        "area_locality": areas_by_type.get("locality", ""),
+        "area_suburb": areas_by_type.get("suburb", ""),
+        "area_user_defined": user_defined_joined,
+        "area_index_area": areas_by_type.get("indexArea", ""),
+        "electricity_bidding_zone": areas_by_type.get("electricityBiddingZone", ""),
+
+        # Agent/agency
+        "agent_id": agent.get("id"),
+        "agent_name": agent.get("name"),
+        "agent_recommendations": agent.get("recommendations"),
+        "agent_review_count": agent.get("reviewCount"),
+        "agent_overall_rating": agent.get("overallRating"),
+        "agent_premium": agent.get("premium"),
+        "agency_id": agency.get("id"),
+        "agency_name": agency.get("name"),
+
+        # Booli relative URL
         "url": node.get("url"),
+
+        # Debug (optional): keep type to understand unions
+        "__typename": node.get("__typename"),
     }
 
-def fetch_all_sold(
-    area_id: str,
-    *,
-    page_size: int = 100,
-) -> List[Dict[str, Any]]:
+
+def fetch_all_sold(area_id: str, page_size: int, graphql_url: str) -> List[Dict[str, Any]]:
     """
-    Fetch all sold properties for a given area using page/pageSize pagination.
-    Returns a list of flattened property dicts ready for CSV/Pandas.
+    Fetch all sold results for an areaId across all pages.
     """
-    transport = build_transport()
+    transport = build_transport(graphql_url)
+
+    # fetch_schema_from_transport=False avoids any schema introspection attempts (some servers block it).
     client = Client(transport=transport, fetch_schema_from_transport=False)
 
-    all_rows: List[Dict[str, Any]] = []
+    first = fetch_sold_page(client, area_id=area_id, page=1, page_size=page_size)
+    total_pages = int(first.get("pages") or 0)
+    total_count = int(first.get("totalCount") or 0)
 
-    # First page: also tells us how many pages there are in total.
-    first_page = fetch_sold_page(
-        client,
-        area_id=area_id,
-        page=1,
-        page_size=page_size,
-    )
+    print(f"Total count: {total_count}, pages: {total_pages}, page_size: {page_size}")
 
-    total_count = first_page.get("totalCount")
-    total_pages = first_page.get("pages") or 1
+    rows: List[Dict[str, Any]] = []
+    for node in first.get("result", []) or []:
+        rows.append(flatten_result(node))
 
-    print(f"Total sold items reported by API: {total_count}")
-    print(f"Total pages: {total_pages}")
+    for p in range(2, total_pages + 1):
+        page_data = fetch_sold_page(client, area_id=area_id, page=p, page_size=page_size)
+        for node in page_data.get("result", []) or []:
+            rows.append(flatten_result(node))
 
-    for node in first_page.get("result", []):
-        flat = flatten_property(node)
-        all_rows.append(flat)
+        # Light progress indicator
+        if p % 25 == 0 or p == total_pages:
+            print(f"Fetched page {p}/{total_pages} (rows so far: {len(rows)})")
 
-    # Loop remaining pages until all pages are fetched
-    for page in range(2, total_pages + 1):
-        page_data = fetch_sold_page(
-            client,
-            area_id=area_id,
-            page=page,
-            page_size=page_size,
-        )
-
-        for node in page_data.get("result", []):
-            flat = flatten_property(node)
-            if flat is not None:
-                all_rows.append(flat)
-
-        print(f"Fetched page {page}/{total_pages}, rows so far: {len(all_rows)}")
-
-    return all_rows
+    return rows
 
 
 def write_csv(rows: List[Dict[str, Any]], output_path: Path) -> None:
     """
-    Write the flattened rows to a CSV file with a stable, human-friendly column order.
+    Write rows to CSV with a stable, human-friendly column order.
     """
     if not rows:
-        print("No rows to write, skipping CSV file.")
+        print("No rows to write. CSV not created.")
         return
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Preferred logical order of columns
     preferred_order = [
+        # Identity & transaction
         "id",
-        "street_address",
-        "latitude",
-        "longitude",
+        "sold_date",
+
+        # Prices
+        "sold_price_raw",
+        "sold_price_unit",
+        "sold_sqm_price_raw",
+        "sold_sqm_price_unit",
+        "list_price_raw",
+        "list_price_unit",
+        "first_price_raw",
+        "first_price_unit",
+
+        # Property
         "object_type",
         "construction_year",
         "living_area_raw",
@@ -212,21 +343,42 @@ def write_csv(rows: List[Dict[str, Any]], output_path: Path) -> None:
         "rooms_unit",
         "operating_cost_raw",
         "operating_cost_unit",
-        "primary_area_type",
-        "primary_area_name",
-        "secondary_area_type",
-        "secondary_area_name",
-        "secondary_area_id",
+
+        # Location
+        "street_address",
+        "post_code",
+        "named_areas",
+        "municipality_name",
+        "county_name",
+        "latitude",
+        "longitude",
+
+        # Area tags
+        "area_country",
+        "area_populated_area",
+        "area_locality",
+        "area_suburb",
+        "area_user_defined",
+        "area_index_area",
+        "electricity_bidding_zone",
+
+        # Agent/agency
+        "agent_id",
+        "agent_name",
+        "agent_recommendations",
+        "agent_review_count",
+        "agent_overall_rating",
+        "agent_premium",
+        "agency_id",
+        "agency_name",
+
+        # URL + debug
         "url",
+        "__typename",
     ]
 
-    # Collect all keys that actually exist in the data
-    all_keys = {key for row in rows for key in row.keys()}
-
-    # Keep preferred order, but only for keys that really exist
-    fieldnames: List[str] = [k for k in preferred_order if k in all_keys]
-
-    # Append any extra keys that are not in the preferred list
+    all_keys = {k for r in rows for k in r.keys()}
+    fieldnames = [k for k in preferred_order if k in all_keys]
     extras = sorted(all_keys - set(fieldnames))
     fieldnames.extend(extras)
 
@@ -239,42 +391,36 @@ def write_csv(rows: List[Dict[str, Any]], output_path: Path) -> None:
     print("Columns:", ", ".join(fieldnames))
 
 
-def main() -> None:
+def parse_args() -> argparse.Namespace:
     """
-    CLI entrypoint for `vm-fetch`.
-
-    Example:
-      vm-fetch --area-id 268 --output data/partille_sold.csv --page-size 100
+    Parse CLI arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Fetch sold property data from Booli GraphQL into a local CSV cache."
+        description="Fetch Booli sold data via GraphQL and write to a local CSV cache."
     )
+    parser.add_argument("--area-id", required=True, help="Booli areaId (e.g. 268 for Partille)")
+    parser.add_argument("--output", required=True, help="Output CSV file path")
+    parser.add_argument("--page-size", type=int, default=100, help="Page size for GraphQL pagination")
     parser.add_argument(
-        "--area-id",
-        required=True,
-        help="Booli areaId as string, e.g. '268' for Partille.",
+        "--graphql-url",
+        default=os.environ.get("BOOLI_GRAPHQL_URL", DEFAULT_BOOLI_GRAPHQL_URL),
+        help="Booli GraphQL URL (default: https://www.booli.se/graphql)",
     )
-    parser.add_argument(
-        "--output",
-        default="data/sold_properties.csv",
-        help="Output CSV file path (default: data/sold_properties.csv).",
-    )
-    parser.add_argument(
-        "--page-size",
-        type=int,
-        default=100,
-        help="Number of items per page to request from the API (default: 100).",
-    )
+    return parser.parse_args()
 
-    args = parser.parse_args()
 
+def main() -> int:
+    args = parse_args()
     output_path = Path(args.output)
+
     rows = fetch_all_sold(
-        area_id=args.area_id,
-        page_size=args.page_size,
+        area_id=str(args.area_id),
+        page_size=int(args.page_size),
+        graphql_url=str(args.graphql_url),
     )
     write_csv(rows, output_path)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
