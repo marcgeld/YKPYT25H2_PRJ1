@@ -173,6 +173,35 @@ def join_list(value: Any, sep: str = "|") -> str:
     return str(value)
 
 
+def require_unit(
+    unit: Optional[str],
+    expected_unit: str,
+    field_name: str,
+    object_id: Optional[str] = None,
+) -> None:
+    """
+    Ensure that a field uses the expected unit.
+
+    - If unit is None, the check is skipped (missing data is allowed).
+    - If unit is present and does not match expected_unit, raise ValueError.
+    """
+
+    if expected_unit is None:
+        raise RuntimeError(
+            f"Invalid configuration: expected_unit is None for field '{field_name}'"
+        )
+
+    # Missing unit is allowed (null-safe)
+    if unit is None:
+        return
+
+    if unit != expected_unit:
+        obj = f" (object id={object_id})" if object_id else ""
+        raise ValueError(
+            f"Unexpected unit for '{field_name}': '{unit}', "
+            f"expected '{expected_unit}'{obj}"
+        )
+
 def flatten_result(node: Dict[str, Any]) -> Dict[str, Any]:
     """
     Flatten a single searchSold 'result' element into a CSV-friendly row.
@@ -181,15 +210,72 @@ def flatten_result(node: Dict[str, Any]) -> Dict[str, Any]:
     alongside property fields (Property). We therefore safely read both sets of fields
     from the same node.
     """
+    object_id = node.get("id")
     operating_cost = node.get("operatingCost") or {}
     living_area = node.get("livingArea") or {}
     plot_area = node.get("plotArea") or {}
     rooms = node.get("rooms") or {}
 
+    # Enforce area units
+    require_unit(
+        operating_cost.get("unit"),
+        expected_unit="kr/mån",
+        field_name="operating_cost",
+        object_id=object_id,
+    )
+
+    require_unit(
+        living_area.get("unit"),
+        expected_unit="m²",
+        field_name="livingArea",
+        object_id=object_id,
+    )
+
+    require_unit(
+        living_area.get("unit"),
+        expected_unit="m²",
+        field_name="plot_area",
+        object_id=object_id,
+    )
+
+    require_unit(
+        living_area.get("rooms"),
+        expected_unit="rum",
+        field_name="rooms",
+        object_id=object_id,
+    )
     list_price = node.get("listPrice") or {}
     first_price = node.get("firstPrice") or {}
     sold_price = node.get("soldPrice") or {}
     sold_sqm_price = node.get("soldSqmPrice") or {}
+
+    require_unit(
+        list_price.get("unit"),
+        expected_unit="kr",
+        field_name="list_price",
+        object_id=object_id,
+    )
+
+    require_unit(
+        list_price.get("unit"),
+        expected_unit="kr",
+        field_name="list_price",
+        object_id=object_id,
+    )
+
+    require_unit(
+        sold_price.get("unit"),
+        expected_unit="kr",
+        field_name="sold_price",
+        object_id=object_id,
+    )
+
+    require_unit(
+        sold_sqm_price.get("unit"),
+        expected_unit="kr/m²",
+        field_name="sold_sqm_price",
+        object_id=object_id,
+    )
 
     agent = node.get("agent") or {}
     agency = node.get("agency") or {}
@@ -232,13 +318,13 @@ def flatten_result(node: Dict[str, Any]) -> Dict[str, Any]:
         "object_type": node.get("objectType"),
         "construction_year": node.get("constructionYear"),
         "living_area_raw": living_area.get("raw"),
-        "living_area_unit": living_area.get("unit"),
+        #"living_area_unit": living_area.get("unit"),
         "plot_area_raw": plot_area.get("raw"),
-        "plot_area_unit": plot_area.get("unit"),
+        #"plot_area_unit": plot_area.get("unit"),
         "rooms_raw": rooms.get("raw"),
-        "rooms_unit": rooms.get("unit"),
+        #"rooms_unit": rooms.get("unit"),
         "operating_cost_raw": operating_cost.get("raw"),
-        "operating_cost_unit": operating_cost.get("unit"),
+        #"operating_cost_unit": operating_cost.get("unit"),
 
         # Location / address
         "street_address": address.get("streetAddress"),
@@ -324,25 +410,25 @@ def write_csv(rows: List[Dict[str, Any]], output_path: Path) -> None:
 
         # Prices
         "sold_price_raw",
-        "sold_price_unit",
+        #"sold_price_unit",
         "sold_sqm_price_raw",
-        "sold_sqm_price_unit",
+        #"sold_sqm_price_unit",
         "list_price_raw",
-        "list_price_unit",
+        #"list_price_unit",
         "first_price_raw",
-        "first_price_unit",
+        #"first_price_unit",
 
         # Property
         "object_type",
         "construction_year",
         "living_area_raw",
-        "living_area_unit",
+        #"living_area_unit",
         "plot_area_raw",
-        "plot_area_unit",
+        #"plot_area_unit",
         "rooms_raw",
-        "rooms_unit",
+        #"rooms_unit",
         "operating_cost_raw",
-        "operating_cost_unit",
+        #"operating_cost_unit",
 
         # Location
         "street_address",
@@ -373,17 +459,15 @@ def write_csv(rows: List[Dict[str, Any]], output_path: Path) -> None:
         "agency_name",
 
         # URL + debug
-        "url",
-        "__typename",
+        #"url",
+        #"__typename",
     ]
 
     all_keys = {k for r in rows for k in r.keys()}
     fieldnames = [k for k in preferred_order if k in all_keys]
-    extras = sorted(all_keys - set(fieldnames))
-    fieldnames.extend(extras)
 
     with output_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

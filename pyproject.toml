@@ -9,8 +9,17 @@ readme = "README.md"
 requires-python = ">=3.14"
 
 dependencies = [
+    "pip>=25",
+
     "requests>=2.31",
-    "gql[requests]>=4.0.0"
+    "gql[requests]>=4.0.0",
+    "ipykernel>=7.1.0",
+
+    # EDA / analysis
+    "pandas>=2.3",
+    "numpy>=2.4",
+    "matplotlib>=3.10",
+    "seaborn>=0.13",
 ]
 
 [project.scripts]
