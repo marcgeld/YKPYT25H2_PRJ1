@@ -43,39 +43,41 @@ pip install -e .
 ### vm-fetch – fetch data from GraphQL endpoint (Booli)
 
 ```bash
-vm-fetch --area-id 268 --output data/partille_raw.csv
-```
-
-Or with [uv](https://docs.astral.sh/uv/getting-started/installation/)
-
-```bash
 uv run vm-fetch --area-id 268 --output data/partille_raw.csv
 ```
+> If you are _*NOT*_ using [uv](https://docs.astral.sh/uv/getting-started/installation/) 
+> do all the setup and run without the prefix `uv run`
+> e.g.
+> 
+>```bash
+>vm-fetch --area-id 268 --output data/partille_raw.csv
+>```
 
 ### vm-train – train a baseline model
 
+Baseline (auto compare ridge log / ridge / hgb log and save best model):
+
 ```bash
-vm-train --data data/partille_raw.csv --model-out data/partille_model.joblib
+uv run vm-train --csv data/partille_sold_eda.csv --target sold_price_raw \
+  --model-out data/partille_model.joblib
 ```
 
-Or with [uv](https://docs.astral.sh/uv/getting-started/installation/)
+With hyperparameter tuning:
 
 ```bash
-uv run vm-train --data data/partille_raw.csv --model-out data/partille_model.joblib
+uv run vm-train --csv data/partille_sold_eda.csv \
+  --target sold_price_raw --model-out data/partille_model.joblib --tune
 ```
 
 ### vm-infer – run inference given model & features
 
-```bash
-vm-infer --model data/partille_model.joblib --living-area 160 --rooms 5 --plot-area 500
-```
-
-Or with [uv](https://docs.astral.sh/uv/getting-started/installation/)
+Run inference using input YAML file `data/example_infer.yaml` that contains listing features.
 
 ```bash
-uv run vm-infer --model data/partille_model.joblib --living-area 160 --rooms 5 --plot-area 500
+uv run vm-infer --model data/partille_model.joblib --input data/example_infer.yaml
 ```
-## Feature egineering and model training notebook
+
+## Feature engineering and model training notebook
 
 | Place                         | Note                                                                                                                  |lat/lon|
 |-------------------------------|-----------------------------------------------------------------------------------------------------------------------|-------|

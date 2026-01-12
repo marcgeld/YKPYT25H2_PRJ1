@@ -1,0 +1,39 @@
+{
+  "created_at_utc": "2026-01-08T14:30:42.534354+00:00",
+  "csv_path": "data/partille_sold_eda.csv",
+  "target": "sold_price_raw",
+  "model_type": "Ridge(alpha=1.0) + median-impute + scale + log1p(target)",
+  "use_log_target": true,
+  "test_size": 0.2,
+  "random_state": 42,
+  "n_rows_total": 6242,
+  "n_rows_used": 6242,
+  "n_train": 4993,
+  "n_test": 1249,
+  "feature_columns": [
+    "living_area_raw",
+    "plot_area_raw",
+    "rooms_raw",
+    "rooms_missing",
+    "operating_cost_raw",
+    "house_age",
+    "plot_living_ratio",
+    "latitude",
+    "longitude",
+    "sold_year",
+    "sold_month",
+    "min_dist_center_km",
+    "min_dist_transport_km",
+    "min_dist_workplace_km",
+    "min_dist_infrastructure_km",
+    "min_dist_recreation_km",
+    "type_Villa",
+    "type_Radhus",
+    "type_Parhus"
+  ],
+  "metrics": {
+    "rmse": 1059948.0005562338,
+    "mae": 762941.6802104034,
+    "r2": 0.6933883855745633
+  }
+}

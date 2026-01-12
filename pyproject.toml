@@ -9,17 +9,28 @@ readme = "README.md"
 requires-python = ">=3.14"
 
 dependencies = [
-    "pip>=25",
-
+    # Networking / GraphQL
     "requests>=2.31",
     "gql[requests]>=4.0.0",
-    "ipykernel>=7.1.0",
+
+    # Jupyter / notebooks
+    "ipykernel>=7.1",
 
     # EDA / analysis
     "pandas>=2.3",
     "numpy>=2.4",
     "matplotlib>=3.10",
     "seaborn>=0.13",
+
+    # ML / training
+    "scikit-learn>=1.5",
+    "joblib>=1.4",
+
+    # Typstöd (valfritt men bra)
+    "pandas-stubs~=2.3.3",
+
+    # YAML files
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]

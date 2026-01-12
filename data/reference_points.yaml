@@ -1,0 +1,83 @@
+poi:
+  # Centers
+  - key: partille_center
+    name: "Partille centrum"
+    category: center
+    lat: 57.7396
+    lon: 12.1064
+
+  - key: gbg_center
+    name: "Göteborg centrum"
+    category: center
+    lat: 57.7089
+    lon: 11.9746
+
+  # Public transport (train stations)
+  - key: partille_station
+    name: "Partille station"
+    category: transport
+    lat: 57.7399
+    lon: 12.1069
+
+  - key: jonsered_station
+    name: "Jonsereds station"
+    category: transport
+    lat: 57.7496
+    lon: 12.1738
+
+  # Major workplaces / institutions
+  - key: ostra
+    name: "Östra sjukhuset"
+    category: workplace
+    lat: 57.7206
+    lon: 12.0510
+
+  # Infrastructure / highway access
+  - key: e20_partille
+    name: "E20 Partillemotet"
+    category: infrastructure
+    lat: 57.7409
+    lon: 12.1079
+
+  - key: e45_gamlestadsmotet
+    name: "E45 Gamlestadsmotet"
+    category: infrastructure
+    lat: 57.7266
+    lon: 12.0215
+
+  - key: e20_jonsered_lerum
+    name: "Jonseredsmotet / Lerum E20"
+    category: infrastructure
+    lat: 57.7486
+    lon: 12.1732
+
+  - key: rv40_landvetter
+    name: "Väg 40 (Landvettermotet)"
+    category: infrastructure
+    lat: 57.6846
+    lon: 12.2957
+
+  # Recreation / nature
+  - key: delsjon
+    name: "Delsjön"
+    category: recreation
+    lat: 57.7202
+    lon: 12.0419
+
+  - key: kasjon
+    name: "Kåsjön"
+    category: recreation
+    lat: 57.7646
+    lon: 12.1687
+
+  - key: partille_golf
+    name: "Partille golfbana"
+    category: recreation
+    lat: 57.7423
+    lon: 12.1414
+
+  - key: jonsered_herrgard
+    name: "Jonsereds herrgård"
+    category: recreation
+    lat: 57.7534
+    lon: 12.1689

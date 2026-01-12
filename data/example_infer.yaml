@@ -1,0 +1,28 @@
+objects:
+  - name: "Villa i Sävedalen (60-tal)"
+    type: Villa
+    latitude: 57.7238
+    longitude: 12.0630
+    living_area_raw: 99
+    plot_area_raw: 1040
+    rooms_raw: 4
+    operating_cost_raw: 3400
+    house_age: 59
+  - name: "Villa i Sävedalen (70-tal)"
+    type: Villa
+    latitude: 57.7289
+    longitude: 12.0661
+    living_area_raw: 135
+    plot_area_raw: 820
+    rooms_raw: 5
+    operating_cost_raw: 3400
+    house_age: 52
+  - name: "Radhus i Öjersjö (90-tal)"
+    type: Radhus
+    latitude: 57.7008
+    longitude: 12.1392
+    living_area_raw: 110
+    plot_area_raw: 160
+    rooms_raw: 4
+    operating_cost_raw: 2900
+    house_age: 28
