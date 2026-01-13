@@ -3,7 +3,7 @@ objects:
     type: Villa
     latitude: 57.7238
     longitude: 12.0630
-    living_area_raw: 99
+    living_area_raw: 165
     plot_area_raw: 1040
     rooms_raw: 4
     operating_cost_raw: 3400

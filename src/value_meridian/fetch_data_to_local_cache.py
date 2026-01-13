@@ -18,10 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
-
 # Default endpoint (you can override with BOOLI_GRAPHQL_URL env var)
 DEFAULT_BOOLI_GRAPHQL_URL = "https://www.booli.se/graphql"
-
 
 # This query matches your new working query structure.
 # Note: Booli expects areaId as ID!, not String!.
@@ -174,10 +172,10 @@ def join_list(value: Any, sep: str = "|") -> str:
 
 
 def require_unit(
-    unit: Optional[str],
-    expected_unit: str,
-    field_name: str,
-    object_id: Optional[str] = None,
+        unit: Optional[str],
+        expected_unit: str,
+        field_name: str,
+        object_id: Optional[str] = None,
 ) -> None:
     """
     Ensure that a field uses the expected unit.
@@ -201,6 +199,7 @@ def require_unit(
             f"Unexpected unit for '{field_name}': '{unit}', "
             f"expected '{expected_unit}'{obj}"
         )
+
 
 def flatten_result(node: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -318,13 +317,13 @@ def flatten_result(node: Dict[str, Any]) -> Dict[str, Any]:
         "object_type": node.get("objectType"),
         "construction_year": node.get("constructionYear"),
         "living_area_raw": living_area.get("raw"),
-        #"living_area_unit": living_area.get("unit"),
+        # "living_area_unit": living_area.get("unit"),
         "plot_area_raw": plot_area.get("raw"),
-        #"plot_area_unit": plot_area.get("unit"),
+        # "plot_area_unit": plot_area.get("unit"),
         "rooms_raw": rooms.get("raw"),
-        #"rooms_unit": rooms.get("unit"),
+        # "rooms_unit": rooms.get("unit"),
         "operating_cost_raw": operating_cost.get("raw"),
-        #"operating_cost_unit": operating_cost.get("unit"),
+        # "operating_cost_unit": operating_cost.get("unit"),
 
         # Location / address
         "street_address": address.get("streetAddress"),
@@ -410,25 +409,25 @@ def write_csv(rows: List[Dict[str, Any]], output_path: Path) -> None:
 
         # Prices
         "sold_price_raw",
-        #"sold_price_unit",
+        # "sold_price_unit",
         "sold_sqm_price_raw",
-        #"sold_sqm_price_unit",
+        # "sold_sqm_price_unit",
         "list_price_raw",
-        #"list_price_unit",
+        # "list_price_unit",
         "first_price_raw",
-        #"first_price_unit",
+        # "first_price_unit",
 
         # Property
         "object_type",
         "construction_year",
         "living_area_raw",
-        #"living_area_unit",
+        # "living_area_unit",
         "plot_area_raw",
-        #"plot_area_unit",
+        # "plot_area_unit",
         "rooms_raw",
-        #"rooms_unit",
+        # "rooms_unit",
         "operating_cost_raw",
-        #"operating_cost_unit",
+        # "operating_cost_unit",
 
         # Location
         "street_address",
@@ -459,8 +458,8 @@ def write_csv(rows: List[Dict[str, Any]], output_path: Path) -> None:
         "agency_name",
 
         # URL + debug
-        #"url",
-        #"__typename",
+        # "url",
+        # "__typename",
     ]
 
     all_keys = {k for r in rows for k in r.keys()}
